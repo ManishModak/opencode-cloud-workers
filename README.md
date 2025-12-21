@@ -1,8 +1,11 @@
 # OpenCode Cloud Workers Plugin ☁️👷
 
+> [!WARNING]
+> **Development Preview**: This project is currently in active development. There are no official releases yet, and APIs may change.
+
 **"Local Strategy, Remote Execution"**
 
-A plugin for [OpenCode](https://github.com/google-deepmind/opencode) that enables you to delegate heavy, long-running, or complex coding tasks to asynchronous cloud agents (Cloud Workers), specifically **Google Jules**.
+A plugin for [OpenCode](https://github.com/sst/opencode) that enables you to delegate heavy, long-running, or complex coding tasks to asynchronous cloud agents (Cloud Workers), specifically **Google Jules**.
 
 ## Features
 
