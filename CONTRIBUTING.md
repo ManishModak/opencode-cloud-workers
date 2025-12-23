@@ -43,11 +43,61 @@ We welcome and appreciate various forms of contributions:
 ## Code Style
 
 To maintain code quality and consistency, please adhere to the following standards:
-- **General Guidelines**: Follow the principles outlined in [AGENTS.md](../AGENTS.md).
+- **General Guidelines**: Follow the principles outlined in [AGENTS.md](./AGENTS.md).
 - **Indentation**: Use 4-space indentation.
 - **Quotes**: Use double quotes for all strings.
 - **Validation**: Use Zod for schema definitions and data validation.
 - **Error Handling**: Do not use `try/catch` blocks. Use early returns and result-based patterns instead.
+
+## Commit Messages
+
+We follow [Conventional Commits](https://www.conventionalcommits.org/). Format:
+
+```
+<type>(<scope>): <description>
+
+[optional body]
+```
+
+**Types:**
+| Type | Description |
+|------|-------------|
+| `feat` | New feature |
+| `fix` | Bug fix |
+| `docs` | Documentation changes |
+| `refactor` | Code refactoring (no feature/fix) |
+| `test` | Adding or updating tests |
+| `chore` | Build, CI, tooling changes |
+
+**Examples:**
+```bash
+feat(jules): add session polling with exponential backoff
+fix(provider): handle rate limit errors gracefully
+docs(readme): add configuration examples
+test(loop): add unit tests for CloudWorkerLoop
+```
+
+## Testing Guidelines
+
+All contributions should include appropriate tests:
+
+```bash
+# Run all tests
+bun run test
+
+# Run specific test file
+bun run test src/providers/jules/__tests__/client.test.ts
+
+# Run tests in watch mode
+bun run test --watch
+```
+
+**Testing standards:**
+- Unit tests for all new functions and classes
+- Integration tests for provider implementations
+- Mock external APIs (never make real API calls in tests)
+- Use descriptive test names: `it("should return error when session not found")`
+- Aim for >80% coverage on new code
 
 ## Design Review
 

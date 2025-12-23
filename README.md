@@ -1,6 +1,8 @@
 # OpenCode Cloud Workers Plugin ☁️👷
 
 [![CI](https://github.com/ManishModak/opencode-cloud-workers/actions/workflows/ci.yml/badge.svg)](https://github.com/ManishModak/opencode-cloud-workers/actions/workflows/ci.yml)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)](https://www.typescriptlang.org/)
+[![Bun](https://img.shields.io/badge/Bun-1.3+-f9f1e1.svg)](https://bun.sh/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 > [!WARNING]
@@ -9,6 +11,20 @@
 **"Local Strategy, Remote Execution"**
 
 A plugin for [OpenCode](https://github.com/sst/opencode) that enables you to delegate heavy, long-running, or complex coding tasks to asynchronous cloud agents (Cloud Workers), specifically **Google Jules**.
+
+---
+
+## Table of Contents
+
+- [Features](#features)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Usage](#usage)
+- [Architecture](#architecture)
+- [Documentation](#documentation)
+- [Development](#development)
+- [Contributing](#contributing)
+- [License](#license)
 
 ## Features
 
@@ -92,6 +108,19 @@ This plugin follows the **"Local Strategy, Remote Execution"** philosophy.
 
 - **Local**: Context, Decision Making, Review, Orchestration.
 - **Remote**: Heavy Compute, Sandboxed Execution, Environment Setup.
+
+See [docs/architecture.md](docs/architecture.md) for detailed system diagrams and component breakdown.
+
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Getting Started](docs/getting-started.md) | Installation, configuration, first session walkthrough |
+| [Architecture](docs/architecture.md) | System design, components, data flow |
+| [Configuration](docs/configuration.md) | Full configuration schema and options |
+| [Jules API Reference](docs/jules_api_docs/) | Complete Jules API documentation |
+| [AGENTS.md](AGENTS.md) | AI agent and contributor guidelines |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute to this project |
 
 ## Development
 
