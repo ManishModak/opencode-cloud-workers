@@ -14,13 +14,15 @@ The configuration follows this schema:
 |--------|------|---------|-------------|
 | `default_provider` | `string` | `"jules"` | The provider to use when none is specified. |
 | `providers` | `object` | `{}` | A map of provider-specific configurations. |
-| `poll_interval_ms` | `number` | `30000` | How often to poll the remote session status (in ms). |
+| `poll_interval_ms` | `number` | `60000` | How often to poll the remote session status (in ms). Min: 10000, Max: 300000. |
 | `max_wait_ms` | `number` | `21600000` | Maximum time to wait for a session to complete (default 6 hours). |
 | `auto_review` | `boolean` | `true` | Whether to automatically trigger a local AI review when a session completes. |
 | `reviewer_agent` | `string` | `"oracle"` | The local agent to use for performing code reviews. |
 | `max_review_rounds`| `number` | `2` | Maximum number of automated feedback rounds before requiring human intervention. |
 | `auto_approve_plan`| `boolean` | `false` | Whether to automatically approve the worker's execution plan (if the provider requires it). |
-| `auto_merge` | `boolean` | `false` | Whether to automatically merge the PR if the review passes. |
+| `notify_on_complete` | `boolean` | `true` | Whether to inject a notification when a task completes. |
+| `auto_trigger_review` | `boolean` | `true` | Whether to auto-start review when task completes (if session is open). |
+| `instruct_openspec` | `boolean` | `true` | Whether to instruct the cloud worker to use OpenSpec for change tracking. |
 | `merge_method` | `string` | `"squash"` | Method to use for merging (`merge`, `squash`, or `rebase`). |
 
 ### Provider Settings
@@ -60,29 +62,43 @@ The plugin relies on environment variables for sensitive credentials:
 
 ### High-Automation Workflow
 
-Automatically approves plans and merges clean PRs using the squash method.
+Automatically approves plans and triggers reviews with extended feedback rounds.
 
 ```json
 {
   "cloud_workers": {
     "auto_approve_plan": true,
     "auto_review": true,
-    "auto_merge": true,
-    "merge_method": "squash",
-    "max_review_rounds": 3
+    "auto_trigger_review": true,
+    "max_review_rounds": 3,
+    "instruct_openspec": true,
+    "merge_method": "squash"
   }
 }
 ```
 
 ### Manual Control Workflow
 
-Disables auto-review and auto-merge for maximum human oversight.
+Disables auto-review for maximum human oversight. Human must trigger review manually.
 
 ```json
 {
   "cloud_workers": {
     "auto_review": false,
-    "auto_merge": false
+    "auto_trigger_review": false,
+    "notify_on_complete": true
+  }
+}
+```
+
+### Slow Polling (Resource Conservation)
+
+For long-running tasks where you don't need frequent updates.
+
+```json
+{
+  "cloud_workers": {
+    "poll_interval_ms": 300000
   }
 }
 ```

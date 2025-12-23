@@ -9,64 +9,202 @@ This design pattern ensures that while heavy computation and execution happen in
 - **Local (OpenCode)**: Holds the project context, defines the strategy (prompts), performs code reviews, and manages the integration (merging).
 - **Remote (Cloud Worker)**: Handles environment setup, dependency installation, long-running test execution, and large-scale file modifications.
 
+## Why Cloud Workers vs Local Agents?
+
+| Aspect | Local Agents (e.g., OMO subagents) | Cloud Workers (Jules) |
+|--------|-------------------------------------|------------------------|
+| **Where it runs** | Your machine, your API keys | Google's cloud sandbox |
+| **Who pays** | You (every token) | Google (their quota) |
+| **Rate limits** | Shares YOUR limits | Separate quota entirely |
+| **Duration** | Minutes (context bound) | Hours (async, detached) |
+| **Output** | Returns to conversation | Creates PR for review |
+
 ## System Diagram
 
 ```text
-┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐
-│                 │       │                 │       │                 │
-│    OpenCode     │──────▶│     Plugin      │──────▶│   Jules API     │
-│  (Orchestrator) │       │ (SessionMgr)    │       │ (Cloud Worker)  │
-│                 │       │                 │       │                 │
-└─────────────────┘       └────────┬────────┘       └────────┬────────┘
-        ▲                          │                         │
-        │                          ▼                         ▼
-        │                 ┌─────────────────┐       ┌─────────────────┐
-        │                 │                 │       │                 │
-        └─────────────────┤   Review Loop   │◀──────┤   GitHub PR     │
-          (Oracle Agent)  │ (Patch Review)  │       │ (Artifacts)     │
-                          │                 │       │                 │
-                          └─────────────────┘       └─────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         OPENCODE + CLOUD WORKERS                        │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │                    LOCAL (OpenCode Plugin)                       │   │
+│   │                                                                  │   │
+│   │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐   │   │
+│   │  │  Detection   │──│ Orchestrator │──│    Merge Manager     │   │   │
+│   │  │  & Suggest   │  │              │  │   (GitHub API/CLI)   │   │   │
+│   │  └──────────────┘  └──────┬───────┘  └──────────────────────┘   │   │
+│   │                           │                                      │   │
+│   │  ┌──────────────┐  ┌──────▼───────┐  ┌──────────────────────┐   │   │
+│   │  │   Reviewer   │──│    Task      │──│    Notification      │   │   │
+│   │  │   (Oracle)   │  │   Tracker    │  │      System          │   │   │
+│   │  └──────────────┘  └──────────────┘  └──────────────────────┘   │   │
+│   │                                                                  │   │
+│   │  ┌──────────────────────────────────────────────────────────┐   │   │
+│   │  │                  Provider Interface                       │   │   │
+│   │  │    CloudWorkerProvider (abstract, multi-provider ready)   │   │   │
+│   │  └──────────────────────────────────────────────────────────┘   │   │
+│   │                              │                                   │   │
+│   └──────────────────────────────│───────────────────────────────────┘   │
+│                                  │                                       │
+│   ┌──────────────────────────────▼───────────────────────────────────┐   │
+│   │                       PROVIDERS                                   │   │
+│   │  ┌────────────────┐  ┌────────────────┐  ┌────────────────────┐  │   │
+│   │  │  Jules (MVP)   │  │  Mock (Tests)  │  │  Future Providers  │  │   │
+│   │  │  REST + CLI    │  │  Fake sessions │  │  Copilot, Cursor...│  │   │
+│   │  └────────────────┘  └────────────────┘  └────────────────────┘  │   │
+│   └──────────────────────────────────────────────────────────────────┘   │
+│                                  │                                       │
+│                                  ▼                                       │
+│   ┌──────────────────────────────────────────────────────────────────┐   │
+│   │                    REMOTE (Jules Cloud)                          │   │
+│   │  • Sandbox environment                                           │   │
+│   │  • File edits, dependency installs, test runs                    │   │
+│   │  • Auto-PR creation                                              │   │
+│   │  • Uses OpenSpec for change tracking (Tier 2)                    │   │
+│   └──────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
+
+## Two-Tier Tracking System
+
+We use a two-tier tracking approach to maintain visibility at both orchestration and implementation levels.
+
+### Tier 1: Cloud Worker Task Tracking (Our System)
+
+**Purpose:** Track what WE offloaded to cloud workers  
+**Storage:** `.opencode/cloud-workers/tasks.json`  
+**Scope:** Orchestration layer
+
+```json
+{
+  "tasks": [
+    {
+      "id": "cw_abc123",
+      "provider": "jules",
+      "providerSessionId": "jules_session_xyz",
+      "status": "in_progress",
+      "originalRequest": "Add tests to all services",
+      "constructedPrompt": "...(full prompt)",
+      "expectedOutcomes": [
+        "Unit tests for UserService",
+        "Unit tests for AuthService",
+        "Coverage >80%"
+      ],
+      "prUrl": null,
+      "reviewRound": 0,
+      "notificationQueued": false
+    }
+  ]
+}
+```
+
+### Tier 2: OpenSpec (Jules' System)
+
+**Purpose:** Track what changes JULES made  
+**Storage:** `openspec/` in the PR branch  
+**Scope:** Implementation details
+
+We instruct Jules to use OpenSpec, which gives us:
+- Structured view of what Jules changed
+- Easy diffing of intent vs implementation
+- Reusable for review agent analysis
 
 ## Component Breakdown
 
-### SessionManager
-The `SessionManager` is responsible for tracking all active and historical cloud worker sessions. It persists the state to `.opencode/cloud-workers/state.json`, ensuring that sessions survive OpenCode restarts.
+### Detection & Suggestion System
 
-### Provider Interface (`RemoteWorkerProvider`)
+Identifies tasks suitable for cloud offloading and suggests to the user.
+
+**Trigger Conditions:**
+- Task complexity (multiple files, refactoring, migration)
+- Explicit keywords ("all files", "entire module", "comprehensive tests")
+- Duration estimate (would take >10 mins in session)
+- Independence check (doesn't need conversation context)
+
+### Task Tracker
+
+The `TaskTracker` is responsible for tracking all cloud worker tasks. It persists state to `.opencode/cloud-workers/tasks.json`, ensuring tasks survive OpenCode restarts and can be resumed in new sessions.
+
+### Provider Interface (`CloudWorkerProvider`)
+
 A standardized interface that allows the plugin to support multiple cloud worker backends. The primary implementation is the `JulesProvider`, which communicates with Google's Jules API.
 
+```typescript
+interface CloudWorkerProvider {
+    name: string;
+    createSession(prompt: string, options: CreateOptions): Promise<SessionResult>;
+    getStatus(sessionId: string): Promise<StatusResult>;
+    sendFeedback(sessionId: string, feedback: string): Promise<void>;
+    cancel(sessionId: string): Promise<void>;
+}
+```
+
 ### Review Loop
-When a cloud worker completes its task, the Review Loop fetches the resulting patch or PR. It uses a local AI agent (defaulting to "Oracle") to analyze the changes against the original prompt. If issues are found, it can automatically send feedback back to the worker.
+
+When a cloud worker completes its task, the Review Loop:
+1. Fetches the resulting PR diff
+2. Reads OpenSpec from PR branch (Tier 2)
+3. Compares against expectedOutcomes (Tier 1)
+4. Uses Oracle agent for analysis
+5. If issues found: sends feedback back to Jules
+6. If approved: proceeds to merge (human confirmation required)
+
+### Notification System
+
+Handles cross-session continuity:
+- **Same session open:** Inject notification + auto-trigger review
+- **Session closed:** Queue notification for next session
+- **New session:** `/cw status` loads pending tasks
 
 ### Tools
+
 The plugin exposes several tools to the OpenCode agent:
-- `cloud_worker_start`: Initiates a session.
-- `cloud_worker_status`: Retrieves current progress.
-- `cloud_worker_list`: Displays all tracked sessions.
-- `cloud_worker_feedback`: Sends instructions to a running/paused worker.
-- `cloud_worker_merge`: Executes the final PR merge.
+- `cloud_worker_start`: Initiates a session with prompt construction
+- `cloud_worker_status`: Retrieves current progress
+- `cloud_worker_list`: Displays all tracked tasks
+- `cloud_worker_feedback`: Sends instructions to a running/paused worker
+- `cloud_worker_merge`: Executes the final PR merge (human confirmed)
 
 ## Data Flow
 
-1.  **Delegation**: The user's request is translated into a `cloud_worker_start` call.
-2.  **Creation**: The Plugin creates a remote session via the Provider API.
-3.  **Persistence**: The session details are saved by the `SessionManager`.
-4.  **Polling**: A background scheduler periodically checks the Provider for status updates.
-5.  **Completion**: Once the remote worker finishes, it creates a GitHub PR.
-6.  **Review**: The Plugin fetches the PR patch and passes it to the local Review Loop.
-7.  **Iterate or Finalize**:
-    - If rejected: Local feedback is sent to the remote worker, restarting the cycle.
-    - If approved: The user is notified, and the PR can be merged manually or automatically.
+1. **Detection**: Agent identifies task suitable for offloading, suggests to user
+2. **Delegation**: User accepts → prompt constructed → task saved to Tier 1
+3. **Creation**: Plugin creates remote session via Provider API
+4. **Polling**: Background scheduler checks Provider every 60s (configurable)
+5. **Completion**: Remote worker finishes → creates PR with OpenSpec (Tier 2)
+6. **Notification**: Plugin notifies user (inject to session or queue)
+7. **Review**: Plugin reviews PR against expectedOutcomes
+8. **Iterate or Finalize**:
+   - If issues: Feedback sent to remote worker, cycle repeats
+   - If approved: Human confirms → PR merged
+
+## Cross-Session Continuity
+
+```
+SCENARIO A: Same Session Open
+└── Context available → review immediately when PR ready
+
+SCENARIO B: New Session (user runs /cw status)
+└── Load tasks.json → check provider status → review in new context
+
+SCENARIO C: Closed & Returned Later
+└── tasks.json persisted → /cw status shows pending → resume flow
+
+SCENARIO D: Active Monitoring (session stays open)
+└── Background polling → notification when ready → auto-trigger review
+```
 
 ## Extension Points
 
 ### New Providers
-To support a new cloud worker (e.g., a future OpenAI or Anthropic coding agent), you can implement the `RemoteWorkerProvider` interface. This requires defining how to:
-- Create a session.
-- Poll for status.
-- Send feedback.
-- Retrieve artifacts (patches/PRs).
+
+To support a new cloud worker (e.g., GitHub Copilot Workspace, Cursor), implement the `CloudWorkerProvider` interface:
+- `createSession()`: Start remote work
+- `getStatus()`: Poll for progress
+- `sendFeedback()`: Send corrections
+- `cancel()`: Abort if needed
 
 ### Custom Reviewers
-You can configure a different local agent or model for the review process by changing the `reviewer_agent` setting. This allows you to use specialized models for security audits or style compliance.
+
+Configure a different local agent for the review process by changing the `reviewer_agent` setting. This allows specialized models for security audits or style compliance.
